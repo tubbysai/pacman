@@ -872,21 +872,27 @@ class Game{
       });
     ctx.restore();
 
-    // Cycling scripture reference — centered, no cross blocking it
+    // Cycling scripture — reference only (single line, always fits)
     const v=BVERSE[this.ghVerseI||0];
     const fadeT=Math.min(this.ghVerseTimer,6000-this.ghVerseTimer);
-    const fa=Math.max(0,Math.min(1,fadeT/600))*(0.72+0.28*pulse);
+    const fa=Math.max(0,Math.min(1,fadeT/600))*(0.75+0.25*pulse);
     ctx.save();
     ctx.globalAlpha=fa;
     ctx.textAlign='center';
-    // Reference (e.g. "John 1:5") — larger, prominent
-    ctx.font=`bold ${TILE*0.75}px system-ui,sans-serif`;
-    ctx.fillStyle='#ffd700';ctx.shadowColor='#ffd700';ctx.shadowBlur=10;
-    ctx.fillText(v[1],CX,CY+TILE*0.14);
-    // Short verse text above
-    ctx.font=`italic ${TILE*0.54}px system-ui,sans-serif`;
-    ctx.fillStyle='rgba(255,235,160,0.88)';ctx.shadowBlur=5;
-    ctx.fillText(v[0].replace(/"/g,''),CX,CY-TILE*0.28);
+    // Bottom: scripture reference bold and prominent
+    ctx.font=`bold ${TILE*0.82}px system-ui,sans-serif`;
+    ctx.fillStyle='#ffd700';ctx.shadowColor='#ffd700';ctx.shadowBlur=12;
+    ctx.fillText(v[1],CX,HY+HH*0.62);
+    // Top: short verse snippet — clamp to width, smaller font
+    ctx.font=`italic ${TILE*0.48}px system-ui,sans-serif`;
+    ctx.fillStyle='rgba(255,235,155,0.85)';ctx.shadowBlur=4;
+    let snippet=v[0].replace(/"/g,'');
+    // Measure and truncate if needed
+    if(ctx.measureText(snippet).width>HW-8){
+      while(snippet.length>0&&ctx.measureText(snippet+'…').width>HW-8)snippet=snippet.slice(0,-1);
+      snippet+='…';
+    }
+    ctx.fillText(snippet,CX,HY+HH*0.32);
     ctx.restore();
   }
 
@@ -986,7 +992,7 @@ class Game{
       const[rBody,gBody,bBody]=hexRGB(hcol);
       const bodyFill=sc
         ?(warn?'rgba(220,210,255,0.97)':'rgba(35,35,130,0.97)')
-        :`rgba(${Math.floor(rBody*0.22+18)},${Math.floor(gBody*0.08+6)},${Math.floor(bBody*0.22+30)},0.97)`;
+        :`rgba(${Math.floor(rBody*0.58+22)},${Math.floor(gBody*0.50+18)},${Math.floor(bBody*0.58+28)},0.97)`;
       ctx.fillStyle=bodyFill;
       ctx.beginPath();
       ctx.arc(e.x,e.y,R,Math.PI,0,false); // dome top
