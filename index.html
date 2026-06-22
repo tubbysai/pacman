@@ -407,7 +407,7 @@ class Game{
         sx:s.c*TILE+TILE/2,sy:s.r*TILE+TILE/2,
         dir:s.d,speed:ESPD*sm*spMods[i],
         scared:false,dead:false,respawn:0,
-        col:ECOL[i],pt:null,sc:Math.random()*2
+        col:ECOL[i],pt:null,sc:Math.random()*2,tile:null
       };
     });
   }
@@ -535,7 +535,7 @@ class Game{
     this.enemies.forEach(e=>{
       if(e.dead){
         e.respawn-=dt*1000;
-        if(e.respawn<=0){e.x=e.sx;e.y=e.sy;e.dead=false;e.scared=false;}
+        if(e.respawn<=0){e.x=e.sx;e.y=e.sy;e.dead=false;e.scared=false;e.tile=null;}
         return;
       }
       const spd=e.scared?e.speed*0.55:e.speed;
@@ -543,11 +543,15 @@ class Game{
 
       const sc=Math.round((e.x-TILE/2)/TILE);
       const sr=Math.round((e.y-TILE/2)/TILE);
-      const ox=Math.abs(e.x-(sc*TILE+TILE/2));
-      const oy=Math.abs(e.y-(sr*TILE+TILE/2));
+      const cx=sc*TILE+TILE/2, cy=sr*TILE+TILE/2;
+      const ox=Math.abs(e.x-cx), oy=Math.abs(e.y-cy);
+      const tileKey=sc+','+sr;
 
-      if(ox<2&&oy<2){
-        // Pick target
+      // AI decides once per tile entry (tileKey changes when enemy enters new tile)
+      if(ox<2&&oy<2&&e.tile!==tileKey){
+        e.tile=tileKey;
+        e.x=cx;e.y=cy; // snap to exact center for clean turns
+
         let tx,ty;
         if(e.scared){tx=GW-p.x;ty=GH-p.y;}
         else if(e.i===0){tx=p.x;ty=p.y;}
@@ -565,7 +569,6 @@ class Game{
           tx=p.x+DX[p.dir]*4*TILE;ty=p.y+DY[p.dir]*4*TILE;
         }
 
-        // Choose best open direction (greedy distance, no reversal unless dead end)
         const dirs=['U','D','L','R'].filter(d=>d!==OPP[e.dir]);
         let best=null,bd=Infinity;
         for(const d of dirs){
@@ -576,17 +579,14 @@ class Game{
           const dd=(nc*TILE+TILE/2-tx)**2+(nr*TILE+TILE/2-ty)**2;
           if(dd<bd){bd=dd;best=d;}
         }
-        if(!best)best=OPP[e.dir]; // allow reversal at dead ends
-        if(best){
-          if(best!==e.dir){e.x=sc*TILE+TILE/2;e.y=sr*TILE+TILE/2;}
-          e.dir=best;
-        }
+        if(!best)best=OPP[e.dir];
+        if(best)e.dir=best;
       }
 
       const nx=e.x+DX[e.dir]*spd*dt;
       const ny=e.y+DY[e.dir]*spd*dt;
       if(this._free(nx,ny,7,false)){e.x=nx;e.y=ny;}
-      else{e.x=sc*TILE+TILE/2;e.y=sr*TILE+TILE/2;}
+      else{e.x=cx;e.y=cy;e.tile=null;} // hit wall: re-evaluate next frame
 
       if(e.x<-TILE/2)e.x=GW+TILE/2;
       if(e.x>GW+TILE/2)e.x=-TILE/2;
