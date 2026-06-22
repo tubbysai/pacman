@@ -46,7 +46,7 @@ body{font-family:'Courier New',monospace;}
 }
 .db:active{background:rgba(0,100,220,0.7);}
 .dc{border-color:rgba(255,215,0,0.5);background:rgba(50,0,0,0.7);font-size:16px;}
-.sp{border:none;background:transparent;pointer-events:none;}
+.sp{border:none!important;background:transparent!important;pointer-events:none;height:12px!important;}
 </style>
 </head>
 <body>
@@ -101,6 +101,15 @@ const ECOL=['#cc1111','#ccbb00','#22cc44','#9922cc'];
 const EEYE=['#ff5500','#ffee00','#55ff33','#dd44ff'];
 const ENC=['Walk in the light','Do not fear','Grace gives another chance',
            'The light shines','Keep going','Be of good courage'];
+const BVERSE=[
+  ['"The light shines in the darkness"','John 1:5'],
+  ['"Do not fear, I am with you"','Isaiah 41:10'],
+  ['"I am the way, truth and the life"','John 14:6'],
+  ['"Be strong and courageous"','Joshua 1:9'],
+  ['"Walk in the light as He is in it"','1 John 1:7'],
+  ['"Put on the full armor of God"','Ephesians 6:11'],
+  ['"Greater is He that is in you"','1 John 4:4'],
+];
 
 // ─────────────────────────────────────────────
 // MAZE  0=open 1=wall 2=dot 3=power 4=house
@@ -232,6 +241,8 @@ class Game{
     this.HUD_H=0;this.DPAD_H=0;this.BSZ=0;
     this.flashA=0;this.wave=-1;this.dieT=0;this.lvlT=0;
     this.encT=0;this.encMsg='';this.swp=null;
+    this.verseTimer=0;this.verseI=0;this.verseDisplayT=0;
+    this.ghVerseI=0;this.ghVerseTimer=6000;
     this._layout();
     this._bind();
     this._hud();
@@ -246,17 +257,21 @@ class Game{
     document.getElementById('hud').style.height=this.HUD_H+'px';
 
     if(this.isTouch){
-      // Button size: fit 3 buttons across ~60% of screen width
-      this.BSZ=Math.max(52,Math.min(72,Math.floor(W*0.19)));
-      this.DPAD_H=this.BSZ*3+3*2+10+4; // 3 rows + gaps + padding
+      // Compact buttons: max 54px, spacers fixed 12px → total ~185px (was ~235px)
+      this.BSZ=Math.max(44,Math.min(54,Math.floor(W*0.155)));
+      const SP=12; // spacer row height
+      this.DPAD_H=this.BSZ*3+SP*2+2*2+10+4; // 3 btn rows + 2 spacer rows + gaps + padding
       const dp=document.getElementById('dpad');
       dp.style.display='flex';
       dp.style.height=this.DPAD_H+'px';
-      // Apply button sizes
-      document.querySelectorAll('.db').forEach(b=>{
+      document.querySelectorAll('.db:not(.sp)').forEach(b=>{
         b.style.width=this.BSZ+'px';
         b.style.height=this.BSZ+'px';
-        b.style.fontSize=Math.floor(this.BSZ*0.38)+'px';
+        b.style.fontSize=Math.floor(this.BSZ*0.4)+'px';
+      });
+      document.querySelectorAll('.sp').forEach(s=>{
+        s.style.width=this.BSZ+'px';
+        s.style.height=SP+'px';
       });
     } else {
       this.DPAD_H=0;
@@ -357,6 +372,7 @@ class Game{
     this.score=0;this.level=1;this.lives=3;this.perf=true;
     this.pow=false;this.powDur=POW_BASE;this.combo=0;
     this.flashA=0;this.wave=-1;this.encT=0;
+    this.verseTimer=10000;this.verseI=0;this.verseDisplayT=0;this.ghVerseI=0;this.ghVerseTimer=5000;
     this.fx.clear();
     this._maze();this._player();this._enemies();
     this.state='play';this.last=0;
@@ -379,7 +395,7 @@ class Game{
   _enemies(){
     const starts=[
       {c:1, r:1, d:'R'},{c:23,r:1, d:'L'},
-      {c:1, r:23,d:'R'},{c:23,r:23,d:'L'},
+      {c:2, r:23,d:'R'},{c:22,r:23,d:'L'}, // col 1 row 23 is a wall — use col 2/22
     ];
     const sm=1+(this.level-1)*0.07;
     const spMods=[1.18,1.0,0.9,1.08]; // Fear fastest, Temptation slowest
@@ -431,6 +447,17 @@ class Game{
       this.powT-=dt*1000;
       if(this.powT<=0){this.pow=false;this.enemies.forEach(e=>{if(!e.dead)e.scared=false;});}
     }
+    // Ghost house verse cycling
+    this.ghVerseTimer-=dt*1000;
+    if(this.ghVerseTimer<=0){this.ghVerseI=(this.ghVerseI+1)%BVERSE.length;this.ghVerseTimer=6000;}
+    // Scripture overlay cycling
+    this.verseTimer-=dt*1000;
+    if(this.verseTimer<=0){
+      this.verseI=(this.verseI+1)%BVERSE.length;
+      this.verseTimer=22000;
+      this.verseDisplayT=3600;
+    }
+    if(this.verseDisplayT>0)this.verseDisplayT-=dt*1000;
     this._movePl(dt);
     this._moveEn(dt);
     this._hits();
@@ -693,10 +720,36 @@ class Game{
     if(this.encT>0){
       ctx.save();
       ctx.globalAlpha=Math.min(1,this.encT/400);
-      ctx.font=`bold ${TILE*1.05}px "Courier New"`;
+      ctx.font=`bold ${TILE*1.05}px system-ui,sans-serif`;
       ctx.fillStyle='#ffd700';ctx.textAlign='center';
       ctx.shadowColor='#ffd700';ctx.shadowBlur=18;
       ctx.fillText(this.encMsg,GW/2,GH/2);
+      ctx.restore();
+    }
+
+    // Scripture verse overlay (rotates every 22s)
+    if(this.verseDisplayT>0){
+      const d=this.verseDisplayT;
+      const fa=d>3200?((3600-d)/400):d>400?1:(d/400);
+      const v=BVERSE[this.verseI];
+      ctx.save();
+      ctx.globalAlpha=fa*0.97;
+      // Frosted backdrop
+      ctx.fillStyle='rgba(4,2,20,0.82)';
+      const bh=TILE*3.5,by=GH*0.5-bh/2;
+      ctx.beginPath();
+      if(ctx.roundRect)ctx.roundRect(GW*0.06,by,GW*0.88,bh,8);
+      else ctx.rect(GW*0.06,by,GW*0.88,bh);
+      ctx.fill();
+      ctx.strokeStyle='rgba(255,200,60,0.4)';ctx.lineWidth=1;ctx.stroke();
+      // Verse text
+      ctx.textAlign='center';
+      ctx.font=`italic ${TILE*0.88}px Georgia,serif`;
+      ctx.fillStyle='#fff8e7';ctx.shadowColor='rgba(255,220,100,0.6)';ctx.shadowBlur=8;
+      ctx.fillText(v[0],GW/2,by+bh*0.42);
+      ctx.font=`bold ${TILE*0.7}px system-ui,sans-serif`;
+      ctx.fillStyle='#ffd700';ctx.shadowColor='#ffd700';ctx.shadowBlur=10;
+      ctx.fillText('— '+v[1]+' —',GW/2,by+bh*0.76);
       ctx.restore();
     }
 
@@ -799,44 +852,41 @@ class Game{
     // Ghost house spans cols 8-14, rows 9-11
     const HX=8*TILE,HY=9*TILE,HW=7*TILE,HH=3*TILE;
     const CX=HX+HW/2,CY=HY+HH/2;
-    const pulse=0.85+0.15*Math.sin(t*1.8);
+    const pulse=0.8+0.2*Math.sin(t*1.6);
 
     // Soft divine radial light
-    const grd=ctx.createRadialGradient(CX,CY,0,CX,CY,HW*0.58);
-    grd.addColorStop(0,`rgba(255,215,80,${0.22*pulse})`);
-    grd.addColorStop(0.5,`rgba(180,110,20,${0.08*pulse})`);
+    const grd=ctx.createRadialGradient(CX,CY,0,CX,CY,HW*0.55);
+    grd.addColorStop(0,`rgba(255,220,100,${0.2*pulse})`);
+    grd.addColorStop(0.6,`rgba(160,100,10,${0.06*pulse})`);
     grd.addColorStop(1,'rgba(0,0,0,0)');
     ctx.fillStyle=grd;ctx.fillRect(HX,HY,HW,HH);
 
-    // Ornate pulsing Latin cross
-    const cs=HH*0.38;
-    ctx.save();
-    ctx.shadowColor='#ffd700';ctx.shadowBlur=18*pulse;
-    ctx.fillStyle=`rgba(255,215,0,${0.9*pulse})`;
-    // Vertical bar: top arm short, bottom arm long (Latin cross)
-    ctx.fillRect(CX-cs*0.17,CY-cs,cs*0.34,cs*2.5);
-    // Horizontal crossbar at 1/3 from top
-    ctx.fillRect(CX-cs*0.72,CY-cs*0.22,cs*1.44,cs*0.32);
-
     // Gothic arch corner accents
-    ctx.globalAlpha=0.42*pulse;
-    ctx.strokeStyle='#ffd700';ctx.lineWidth=1;
-    [[HX+5,HY+5,1,1],[HX+HW-5,HY+5,-1,1],[HX+5,HY+HH-5,1,-1],[HX+HW-5,HY+HH-5,-1,-1]]
+    ctx.save();
+    ctx.globalAlpha=0.38*pulse;
+    ctx.strokeStyle='#ffd700';ctx.lineWidth=0.9;
+    [[HX+4,HY+4,1,1],[HX+HW-4,HY+4,-1,1],[HX+4,HY+HH-4,1,-1],[HX+HW-4,HY+HH-4,-1,-1]]
       .forEach(([px,py,dx,dy])=>{
-        ctx.beginPath();
-        ctx.moveTo(px,py+dy*11);
-        ctx.quadraticCurveTo(px,py,px+dx*11,py);
-        ctx.stroke();
+        ctx.beginPath();ctx.moveTo(px,py+dy*9);
+        ctx.quadraticCurveTo(px,py,px+dx*9,py);ctx.stroke();
       });
     ctx.restore();
 
-    // "John 1:5" pulsing text
+    // Cycling scripture reference — centered, no cross blocking it
+    const v=BVERSE[this.ghVerseI||0];
+    const fadeT=Math.min(this.ghVerseTimer,6000-this.ghVerseTimer);
+    const fa=Math.max(0,Math.min(1,fadeT/600))*(0.72+0.28*pulse);
     ctx.save();
-    ctx.globalAlpha=0.5+0.3*Math.sin(t*1.5);
-    ctx.font=`italic bold ${TILE*0.44}px "Courier New"`;
+    ctx.globalAlpha=fa;
     ctx.textAlign='center';
-    ctx.fillStyle='#ffd700';ctx.shadowColor='#ffd700';ctx.shadowBlur=7;
-    ctx.fillText('John 1:5',CX,HY+HH-3);
+    // Reference (e.g. "John 1:5") — larger, prominent
+    ctx.font=`bold ${TILE*0.75}px system-ui,sans-serif`;
+    ctx.fillStyle='#ffd700';ctx.shadowColor='#ffd700';ctx.shadowBlur=10;
+    ctx.fillText(v[1],CX,CY+TILE*0.14);
+    // Short verse text above
+    ctx.font=`italic ${TILE*0.54}px system-ui,sans-serif`;
+    ctx.fillStyle='rgba(255,235,160,0.88)';ctx.shadowBlur=5;
+    ctx.fillText(v[0].replace(/"/g,''),CX,CY-TILE*0.28);
     ctx.restore();
   }
 
@@ -930,10 +980,14 @@ class Game{
       const ecol=EEYE[e.i];    // eye ember color
 
       ctx.save();
-      if(!sc){ctx.shadowColor=hcol;ctx.shadowBlur=16;}
+      if(!sc){ctx.shadowColor=hcol;ctx.shadowBlur=22;}
 
-      // Shadow spirit body: dark void with jagged flame bottom
-      ctx.fillStyle=sc?(warn?'rgba(210,210,255,0.95)':'rgba(28,28,110,0.95)'):'rgba(6,3,18,0.97)';
+      // Body: dark shadow spirit — uses accent color tint so it reads against dark bg
+      const[rBody,gBody,bBody]=hexRGB(hcol);
+      const bodyFill=sc
+        ?(warn?'rgba(220,210,255,0.97)':'rgba(35,35,130,0.97)')
+        :`rgba(${Math.floor(rBody*0.22+18)},${Math.floor(gBody*0.08+6)},${Math.floor(bBody*0.22+30)},0.97)`;
+      ctx.fillStyle=bodyFill;
       ctx.beginPath();
       ctx.arc(e.x,e.y,R,Math.PI,0,false); // dome top
       // Jagged flame bottom: 5 tendrils
@@ -983,12 +1037,11 @@ class Game{
 
       // Floating flame wisps at bottom
       if(!sc){
-        const[rr,gg,bb]=hexRGB(hcol);
         for(let i=0;i<4;i++){
           const wx=e.x-R*0.65+i*R*0.45;
           const wy=e.y+R*0.9+Math.sin(t*5.2+i*1.3+e.i)*3.8;
           const ws=2+Math.sin(t*3.8+i+e.i)*0.85;
-          ctx.fillStyle=`rgba(${rr},${gg},${bb},0.28)`;
+          ctx.fillStyle=`rgba(${rBody},${gBody},${bBody},0.35)`;
           ctx.shadowColor=hcol;ctx.shadowBlur=7;
           ctx.beginPath();ctx.arc(wx,wy,ws,0,Math.PI*2);ctx.fill();
         }
@@ -1000,68 +1053,94 @@ class Game{
 
   // ── SCREENS ──────────────────────────────────
   _scr_start(ctx,t){
-    ctx.fillStyle='#00010f';ctx.fillRect(0,0,GW,GH);
-    // Background drifting crosses
-    for(let i=0;i<8;i++){
-      const x=((i*137+t*16)%(GW+40))-20;
-      const y=((i*97+t*11)%(GH+40))-20;
-      ctx.save();ctx.globalAlpha=0.04+0.03*Math.sin(t+i);
+    // Gradient background — modern dark cathedral
+    const bg=ctx.createRadialGradient(GW/2,GH*0.42,0,GW/2,GH*0.42,GW*0.82);
+    bg.addColorStop(0,'#0e0530');bg.addColorStop(0.5,'#060118');bg.addColorStop(1,'#000008');
+    ctx.fillStyle=bg;ctx.fillRect(0,0,GW,GH);
+
+    // Slow-drifting subtle cross field
+    for(let i=0;i<12;i++){
+      const x=((i*89+t*9)%(GW+40))-20;
+      const y=((i*113+t*6.5)%(GH+40))-20;
+      ctx.save();ctx.globalAlpha=0.025+0.018*Math.sin(t*0.7+i);
       this._dot(ctx,x,y,t+i);ctx.restore();
     }
 
     ctx.save();ctx.textAlign='center';
 
-    // Main title
-    ctx.font=`bold ${TILE*2.1}px "Courier New"`;
-    ctx.fillStyle='#ffd700';ctx.shadowColor='#ffd700';ctx.shadowBlur=30;
-    ctx.fillText('CROSS CHASE',GW/2,GH*.25);
+    // Glow orb behind title
+    const tg=ctx.createRadialGradient(GW/2,GH*0.2,0,GW/2,GH*0.2,GW*0.45);
+    tg.addColorStop(0,'rgba(180,120,0,0.18)');tg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=tg;ctx.fillRect(0,0,GW,GH*0.55);
 
-    ctx.font=`bold ${TILE*.95}px "Courier New"`;
-    ctx.fillStyle='#88ddff';ctx.shadowColor='#00aaff';ctx.shadowBlur=18;
-    ctx.fillText('LIGHT  vs  SHADOWS',GW/2,GH*.36);
+    // Main title — bold modern sans
+    ctx.font=`900 ${TILE*2.4}px system-ui,sans-serif`;
+    ctx.letterSpacing='2px';
+    ctx.fillStyle='#ffd700';ctx.shadowColor='#ffaa00';ctx.shadowBlur=40;
+    ctx.fillText('CROSS CHASE',GW/2,GH*.24);
 
+    // Subtitle
+    ctx.font=`300 ${TILE*0.88}px system-ui,sans-serif`;
+    ctx.letterSpacing='4px';
+    ctx.fillStyle='rgba(160,220,255,0.9)';ctx.shadowColor='#0088cc';ctx.shadowBlur=16;
+    ctx.fillText('LIGHT  ✝  SHADOWS',GW/2,GH*.345);
+
+    // Divider line
+    ctx.shadowBlur=0;ctx.strokeStyle='rgba(255,210,60,0.25)';ctx.lineWidth=0.8;
+    ctx.beginPath();ctx.moveTo(GW*0.2,GH*0.39);ctx.lineTo(GW*0.8,GH*0.39);ctx.stroke();
+
+    // Tagline
+    ctx.font=`300 ${TILE*0.6}px system-ui,sans-serif`;
+    ctx.fillStyle='rgba(200,225,255,0.7)';
+    ctx.fillText('Collect the crosses. Outrun the shadows.',GW/2,GH*.45);
+
+    // Scripture
+    ctx.font=`italic ${TILE*0.58}px Georgia,serif`;
+    ctx.fillStyle='rgba(255,220,100,0.65)';
+    ctx.fillText('"The light shines in the darkness"  — John 1:5',GW/2,GH*.525);
+
+    // Animated start prompt
+    const pb=0.5+0.5*Math.sin(t*2.4);
+    ctx.font=`600 ${TILE*0.82}px system-ui,sans-serif`;
+    ctx.fillStyle=`rgba(255,215,0,${0.55+pb*0.45})`;
+    ctx.shadowColor='#ffd700';ctx.shadowBlur=14*pb;
+    ctx.fillText(this.isTouch?'► TAP TO START':'► PRESS ANY KEY',GW/2,GH*.66);
+
+    // High score chip
     ctx.shadowBlur=0;
-    ctx.font=`${TILE*.62}px "Courier New"`;
-    ctx.fillStyle='rgba(170,215,255,0.88)';
-    ctx.fillText('Collect the crosses. Escape the shadows.',GW/2,GH*.48);
-
-    ctx.fillStyle='rgba(140,190,255,0.55)';
-    ctx.font=`${TILE*.53}px "Courier New"`;
-    ctx.fillText('— John 1:5 —',GW/2,GH*.55);
-
-    // Blinking prompt
-    if(Math.floor(t*2)%2){
-      ctx.font=`bold ${TILE*.8}px "Courier New"`;
-      ctx.fillStyle='#ffd700';ctx.shadowColor='#ffd700';ctx.shadowBlur=14;
-      ctx.fillText(this.isTouch?'TAP TO START':'PRESS ANY KEY',GW/2,GH*.7);
-    }
-
-    ctx.shadowBlur=0;
-    ctx.font=`${TILE*.58}px "Courier New"`;
+    ctx.fillStyle='rgba(0,180,220,0.12)';
+    const hw=110,hh=22,hx=GW/2-hw/2,hy=GH*.74-hh/2;
+    if(ctx.roundRect){ctx.beginPath();ctx.roundRect(hx,hy,hw*2,hh,5);ctx.fill();}
+    ctx.font=`500 ${TILE*0.55}px system-ui,sans-serif`;
     ctx.fillStyle='#00ccff';
-    ctx.fillText('HIGH SCORE: '+this.hi,GW/2,GH*.81);
+    ctx.fillText('HIGH SCORE  '+this.hi,GW/2,GH*.745);
 
-    ctx.font=`${TILE*.48}px "Courier New"`;
-    ctx.fillStyle='rgba(100,170,255,0.5)';
-    ctx.fillText(this.isTouch?'SWIPE or D-PAD to move':'ARROWS / WASD • P = pause',GW/2,GH*.9);
+    ctx.font=`${TILE*0.46}px system-ui,sans-serif`;
+    ctx.fillStyle='rgba(100,160,230,0.48)';
+    ctx.fillText(this.isTouch?'Swipe or use D-pad  •  Tap to pause':'Arrow keys / WASD  •  P = pause',GW/2,GH*.87);
     ctx.restore();
   }
 
   _scr_over(ctx,t){
-    ctx.fillStyle='rgba(0,1,15,0.88)';ctx.fillRect(0,0,GW,GH);
+    // Modern dark overlay
+    const og=ctx.createRadialGradient(GW/2,GH*0.38,0,GW/2,GH/2,GW*0.7);
+    og.addColorStop(0,'rgba(40,0,0,0.95)');og.addColorStop(1,'rgba(0,0,10,0.92)');
+    ctx.fillStyle=og;ctx.fillRect(0,0,GW,GH);
     ctx.save();ctx.textAlign='center';
-    ctx.font=`bold ${TILE*1.9}px "Courier New"`;
-    ctx.fillStyle='#ff3333';ctx.shadowColor='#ff0000';ctx.shadowBlur=28;
+    ctx.font=`900 ${TILE*2.0}px system-ui,sans-serif`;
+    ctx.fillStyle='#ff3333';ctx.shadowColor='#ff0000';ctx.shadowBlur=30;
     ctx.fillText('GAME OVER',GW/2,GH*.33);
-    ctx.font=`bold ${TILE*1.05}px "Courier New"`;
+    ctx.font=`600 ${TILE*1.05}px system-ui,sans-serif`;
     ctx.fillStyle='#ffd700';ctx.shadowColor='#ffd700';ctx.shadowBlur=14;
     ctx.fillText('SCORE: '+this.score,GW/2,GH*.47);
+    ctx.font=`400 ${TILE*0.82}px system-ui,sans-serif`;
+    ctx.fillStyle='rgba(200,200,255,0.7)';ctx.shadowBlur=0;
     ctx.fillText('BEST:  '+this.hi,GW/2,GH*.57);
-    if(Math.floor(t*2)%2){
-      ctx.font=`bold ${TILE*.78}px "Courier New"`;
-      ctx.fillStyle='#00ccff';ctx.shadowColor='#00ccff';ctx.shadowBlur=12;
-      ctx.fillText(this.isTouch?'TAP TO PLAY AGAIN':'PRESS KEY TO PLAY AGAIN',GW/2,GH*.72);
-    }
+    const pb=0.4+0.6*Math.abs(Math.sin(t*2.2));
+    ctx.font=`600 ${TILE*0.8}px system-ui,sans-serif`;
+    ctx.fillStyle=`rgba(0,200,255,${0.5+pb*0.5})`;
+    ctx.shadowColor='#00ccff';ctx.shadowBlur=12*pb;
+    ctx.fillText(this.isTouch?'► TAP TO PLAY AGAIN':'► PRESS KEY TO PLAY AGAIN',GW/2,GH*.72);
     ctx.restore();
   }
 }
