@@ -578,8 +578,8 @@ class Game{
         }
         if(!best)best=OPP[e.dir]; // allow reversal at dead ends
         if(best){
+          if(best!==e.dir){e.x=sc*TILE+TILE/2;e.y=sr*TILE+TILE/2;}
           e.dir=best;
-          e.x=sc*TILE+TILE/2;e.y=sr*TILE+TILE/2;
         }
       }
 
